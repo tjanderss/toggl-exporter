@@ -14,9 +14,13 @@ jiraUri=https://myjira.com/rest/api/latest
 jiraCredentials=username:password
 ```
 
-2. Build: mvn clean install
+2. Build: 
+
+  `mvn clean install`
+
 3. Run: Execute 
-`java -jar target/toggl-export-1.0-SNAPSHOT.jar [--startDate=dd-mm-yyyy --endDate=dd-mm-yyyy]`
+
+  `java -jar target/toggl-export-1.0-SNAPSHOT.jar [--startDate=dd-mm-yyyy --endDate=dd-mm-yyyy]`
 
 
 
