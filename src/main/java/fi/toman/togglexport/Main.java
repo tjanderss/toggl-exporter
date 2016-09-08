@@ -11,9 +11,9 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 @Configuration
 @ComponentScan
@@ -23,28 +23,78 @@ public class Main implements CommandLineRunner {
 
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
+    private final SimpleDateFormat simpleDateFormat = new SimpleDateFormat("dd-MM-yyyy");
+
     @Autowired
     TimeEntryRetriever<TogglTimeEntry> retriever;
 
     @Autowired
     TimeEntryExporter exporter;
 
-    @Override
-    public void run(String... strings) throws Exception {
+    private Calendar createCalendar() {
         Calendar calendar = Calendar.getInstance();
         calendar.setFirstDayOfWeek(Calendar.MONDAY);
+        return calendar;
+    }
+
+    @Override
+    public void run(String... strings) throws Exception {
+        Calendar startCalendar = createCalendar();
+        Calendar endCalendar = createCalendar();
+
+
+        if (strings.length > 0) {
+            log.info("Parsing command line arguments...");
+
+            Map<String, String> args = new HashMap<>();
+
+            for (int i=0; i < strings.length; i++) {
+                String[] parts = strings[i].split("=");
+                if ((parts.length != 2) || !parts[0].startsWith("--")) {
+                    throw new IllegalArgumentException("Invalid parameter: " +strings[i]+ ", expected '--name=value'");
+                }
+                // convert to lowercase and remove prefix '--'
+                String paramName = parts[0].toLowerCase().substring(2);
+                args.put(paramName, parts[1]);
+                log.info("> " +paramName+ ": " +parts[1]);
+            }
+
+            String strStart = args.get("startdate");
+            String strEnd = args.get("enddate");
+
+            if (strStart != null || strEnd != null) {
+                if (strStart == null || strEnd == null) {
+                    throw new IllegalArgumentException("Missing startDate or endDate from command line args! If one is provided, the other is required as well.");
+                }
+            }
+
+            try {
+                Date start = simpleDateFormat.parse(strStart);
+                Date end = simpleDateFormat.parse(strEnd);
+                startCalendar.setTime(start);
+                endCalendar.setTime(end);
+
+                if (end.before(start)) {
+                    throw new IllegalArgumentException("End date can not be earlier than start date");
+                }
+            } catch (ParseException e) {
+                throw new IllegalArgumentException("Could not parse start- or enddate", e);
+            }
+        } else {
+            log.info("No command line arguments specified. Using default values for start- and enddate (from monday of this week to end of current day).");
+            startCalendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+        }
 
         // End date is the end of the current day
-        calendar.set(Calendar.HOUR_OF_DAY, 23);
-        calendar.set(Calendar.MINUTE, 59);
-        Date endDate = calendar.getTime();
+        endCalendar.set(Calendar.HOUR_OF_DAY, 23);
+        endCalendar.set(Calendar.MINUTE, 59);
+        Date endDate = endCalendar.getTime();
 
         // Start date is defined here as beginning of monday this week
-        calendar.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        Date startDate = calendar.getTime();
+        startCalendar.set(Calendar.HOUR_OF_DAY, 0);
+        startCalendar.set(Calendar.MINUTE, 0);
+        startCalendar.set(Calendar.SECOND, 0);
+        Date startDate = startCalendar.getTime();
 
         List<TogglTimeEntry> entries;
         try {
@@ -64,7 +114,7 @@ public class Main implements CommandLineRunner {
                 log.info("\nPosting worklog: "+ worklog);
                 exporter.postWorklog(worklog);
             } catch (TimeEntryException e) {
-                log.warn("\nWarning!! Skipping entry: " +entry.getDescription()+ "\n\n" +e.getMessage()+"\n");
+                log.warn("\n\n  !!! Warning !!!\n\n  Skipping entry: " +entry.getDescription()+ "\n  " +e.getMessage()+ "\n");
                 log.debug("", e);
                 failureCount++;
             }
@@ -78,6 +128,6 @@ public class Main implements CommandLineRunner {
     }
 
     public static void main(String[] args) throws IOException {
-        SpringApplication.run(Main.class);
+        SpringApplication.run(Main.class, args);
     }
 }
